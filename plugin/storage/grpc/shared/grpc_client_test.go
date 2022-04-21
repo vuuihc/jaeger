@@ -299,6 +299,23 @@ func TestGRPCClientWriteSpan(t *testing.T) {
 	})
 }
 
+func TestGRPCClientWriteSpanStreamingly(t *testing.T) {
+	withGRPCClient(func(r *grpcClientTest) {
+		stream := new(grpcMocks.SpanWriterPlugin_WriteSpanStreaminglyClient)
+		stream.On("Send", mock.Anything).Return(nil)
+		stream.On("CloseSend").Return(nil)
+		r.spanWriter.On("WriteSpanStreamingly", mock.Anything).Return(stream, nil)
+
+		rstream, err := r.client.writerClient.WriteSpanStreamingly(context.Background())
+		assert.NotNil(t, rstream)
+		assert.NoError(t, err)
+		err = rstream.Send(&storage_v1.WriteSpanRequest{Span: &model.Span{}})
+		assert.NoError(t, err)
+		err = rstream.CloseSend()
+		assert.NoError(t, err)
+	})
+}
+
 func TestGRPCClientCloseWriter(t *testing.T) {
 	withGRPCClient(func(r *grpcClientTest) {
 		r.spanWriter.On("Close", mock.Anything, &storage_v1.CloseWriterRequest{}).Return(&storage_v1.CloseWriterResponse{}, nil)

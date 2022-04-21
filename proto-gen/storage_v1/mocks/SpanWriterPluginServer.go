@@ -59,3 +59,17 @@ func (_m *SpanWriterPluginServer) WriteSpan(_a0 context.Context, _a1 *storage_v1
 
 	return r0, r1
 }
+
+// WriteSpanStreamingly provides a mock function with given fields: _a0
+func (_m *SpanWriterPluginServer) WriteSpanStreamingly(_a0 storage_v1.SpanWriterPlugin_WriteSpanStreaminglyServer) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(storage_v1.SpanWriterPlugin_WriteSpanStreaminglyServer) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

@@ -143,6 +143,7 @@ message FindTraceIDsResponse {
 service SpanWriterPlugin {
     // spanstore/Writer
     rpc WriteSpan(WriteSpanRequest) returns (WriteSpanResponse);
+    rpc WriteSpanStreamingly(stream WriteSpanRequest) returns (WriteSpanResponse);
     rpc Close(CloseWriterRequest) returns (CloseWriterResponse);
 }
 

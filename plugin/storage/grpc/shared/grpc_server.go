@@ -46,6 +46,21 @@ func (s *grpcServer) GetDependencies(ctx context.Context, r *storage_v1.GetDepen
 	}, nil
 }
 
+// WriteSpanStreamingly saves the span
+func (s *grpcServer) WriteSpanStreamingly(stream storage_v1.SpanWriterPlugin_WriteSpanStreaminglyServer) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		err = s.Impl.SpanWriter().WriteSpan(stream.Context(), in.Span)
+		if err != nil {
+			return err
+		}
+	}
+	return stream.SendAndClose(&storage_v1.WriteSpanResponse{})
+}
+
 // WriteSpan saves the span
 func (s *grpcServer) WriteSpan(ctx context.Context, r *storage_v1.WriteSpanRequest) (*storage_v1.WriteSpanResponse, error) {
 	err := s.Impl.SpanWriter().WriteSpan(ctx, r.Span)

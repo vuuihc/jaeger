@@ -17,6 +17,7 @@ package shared
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -218,6 +219,18 @@ func TestGRPCServerWriteSpan(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, &storage_v1.WriteSpanResponse{}, s)
+	})
+}
+
+func TestGRPCServerWriteSpanStreamingly(t *testing.T) {
+	withGRPCServer(func(r *grpcServerTest) {
+		stream := new(grpcMocks.SpanWriterPlugin_WriteSpanStreaminglyServer)
+		stream.On("Recv").Return(nil, io.EOF)
+		stream.On("SendAndClose", mock.Anything).Return(nil)
+		r.impl.spanWriter.On("WriteSpan", context.Background(), &mockTraceSpans[0]).
+			Return(nil)
+		err := r.server.WriteSpanStreamingly(stream)
+		assert.NoError(t, err)
 	})
 }
 

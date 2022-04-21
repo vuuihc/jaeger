@@ -52,10 +52,12 @@ type grpcClient struct {
 	archiveWriterClient storage_v1.ArchiveSpanWriterPluginClient
 	capabilitiesClient  storage_v1.PluginCapabilitiesClient
 	depsReaderClient    storage_v1.DependenciesReaderPluginClient
+	streamWriter        storage_v1.SpanWriterPlugin_WriteSpanStreaminglyClient
+	useStreamWriter     bool
 }
 
 func NewGRPCClient(c *grpc.ClientConn) *grpcClient {
-	return &grpcClient{
+	cc := &grpcClient{
 		readerClient:        storage_v1.NewSpanReaderPluginClient(c),
 		writerClient:        storage_v1.NewSpanWriterPluginClient(c),
 		archiveReaderClient: storage_v1.NewArchiveSpanReaderPluginClient(c),
@@ -63,6 +65,12 @@ func NewGRPCClient(c *grpc.ClientConn) *grpcClient {
 		capabilitiesClient:  storage_v1.NewPluginCapabilitiesClient(c),
 		depsReaderClient:    storage_v1.NewDependenciesReaderPluginClient(c),
 	}
+	if probStream, err := cc.writerClient.WriteSpanStreamingly(context.Background()); err == nil {
+		if _, err = probStream.CloseAndRecv(); err == nil {
+			cc.useStreamWriter = true
+		}
+	}
+	return cc
 }
 
 // ContextUpgradeFunc is a functional type that can be composed to upgrade context
@@ -235,18 +243,36 @@ func (c *grpcClient) FindTraceIDs(ctx context.Context, query *spanstore.TraceQue
 
 // WriteSpan saves the span
 func (c *grpcClient) WriteSpan(ctx context.Context, span *model.Span) error {
-	_, err := c.writerClient.WriteSpan(ctx, &storage_v1.WriteSpanRequest{
-		Span: span,
-	})
-
-	if err != nil {
-		return fmt.Errorf("plugin error: %w", err)
+	if c.useStreamWriter {
+		var err error
+		if c.streamWriter == nil {
+			c.streamWriter, err = c.writerClient.WriteSpanStreamingly(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("plugin writerClient.WriteSpanStreamingly error: %w", err)
+		}
+		if err = c.streamWriter.Send(&storage_v1.WriteSpanRequest{
+			Span: span,
+		}); err != nil {
+			return fmt.Errorf("plugin streamWriter.Send error: %w", err)
+		}
+	} else {
+		if _, err := c.writerClient.WriteSpan(ctx, &storage_v1.WriteSpanRequest{
+			Span: span,
+		}); err != nil {
+			return fmt.Errorf("plugin writerClient.WriteSpan error: %v", err)
+		}
 	}
 
 	return nil
 }
 
 func (c *grpcClient) Close() error {
+	if c.streamWriter != nil {
+		if err := c.streamWriter.CloseSend(); err != nil {
+			return fmt.Errorf("plugin CloseSend error: %w", err)
+		}
+	}
 	_, err := c.writerClient.Close(context.Background(), &storage_v1.CloseWriterRequest{})
 	if err != nil && status.Code(err) != codes.Unimplemented {
 		return fmt.Errorf("plugin error: %w", err)
