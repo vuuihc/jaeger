@@ -252,12 +252,14 @@ func TestWithConfiguration(t *testing.T) {
 		"--grpc-storage-plugin.log-level=debug",
 		"--grpc-storage-plugin.binary=noop-grpc-plugin",
 		"--grpc-storage-plugin.configuration-file=config.json",
+		"--grpc-storage-plugin.proto-version=2",
 	})
 	assert.NoError(t, err)
 	f.InitFromViper(v, zap.NewNop())
 	assert.Equal(t, f.options.Configuration.PluginBinary, "noop-grpc-plugin")
 	assert.Equal(t, f.options.Configuration.PluginConfigurationFile, "config.json")
 	assert.Equal(t, f.options.Configuration.PluginLogLevel, "debug")
+	assert.Equal(t, f.options.Configuration.PluginProtoVersion, 2)
 	assert.NoError(t, f.Close())
 }
 

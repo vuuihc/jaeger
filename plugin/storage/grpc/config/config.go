@@ -41,6 +41,7 @@ type Configuration struct {
 	PluginBinary            string `yaml:"binary" mapstructure:"binary"`
 	PluginConfigurationFile string `yaml:"configuration-file" mapstructure:"configuration_file"`
 	PluginLogLevel          string `yaml:"log-level" mapstructure:"log_level"`
+	PluginProtoVersion      int    `yaml:"proto-version" mapstructure:"proto_version"`
 	RemoteServerAddr        string `yaml:"server" mapstructure:"server"`
 	RemoteTLS               tlscfg.Options
 	RemoteConnectTimeout    time.Duration `yaml:"connection-timeout" mapstructure:"connection-timeout"`
@@ -104,7 +105,15 @@ func (c *Configuration) buildRemote(logger *zap.Logger) (*ClientPluginServices, 
 		return nil, fmt.Errorf("error connecting to remote storage: %w", err)
 	}
 
-	grpcClient := shared.NewGRPCClient(conn)
+	var grpcClient shared.GrpcClientI
+	switch c.PluginProtoVersion {
+	case 1:
+		grpcClient = shared.NewGRPCClient(conn)
+	case 2:
+		grpcClient = shared.NewStreamingWriterGPRCClient(conn)
+	default:
+		return nil, fmt.Errorf("plugin.version %d is not supported", c.PluginProtoVersion)
+	}
 	return &ClientPluginServices{
 		PluginServices: shared.PluginServices{
 			Store:        grpcClient,
@@ -122,6 +131,9 @@ func (c *Configuration) buildPlugin(logger *zap.Logger) (*ClientPluginServices, 
 		HandshakeConfig: shared.Handshake,
 		VersionedPlugins: map[int]plugin.PluginSet{
 			1: shared.PluginMap,
+			2: map[string]plugin.Plugin{
+				shared.StoragePluginIdentifier: &shared.StorageStreamingWriterGRPCPlugin{},
+			},
 		},
 		Cmd:              cmd,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},

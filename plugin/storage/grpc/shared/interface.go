@@ -64,3 +64,9 @@ type PluginServices struct {
 	Store        StoragePlugin
 	ArchiveStore ArchiveStoragePlugin
 }
+
+type GrpcClientI interface {
+	StoragePlugin
+	ArchiveStoragePlugin
+	PluginCapabilities
+}
