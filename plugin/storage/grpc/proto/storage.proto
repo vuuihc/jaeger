@@ -147,8 +147,8 @@ service SpanWriterPlugin {
 }
 
 // when this service is used in remote server, jaeger should run with config --grpc-storage-plugin.proto-version=2
-service StreamingWriterPlugin {
-    rpc WriterSpanStream(stream WriteSpanRequest) returns (WriteSpanResponse);
+service StreamingSpanWriterPlugin {
+    rpc WriteSpanStream(stream WriteSpanRequest) returns (WriteSpanResponse);
 }
 
 service SpanReaderPlugin {
