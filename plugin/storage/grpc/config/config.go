@@ -73,11 +73,16 @@ func (c *Configuration) Build(logger *zap.Logger) (*ClientPluginServices, error)
 }
 
 func (c *Configuration) Close() error {
-	if c.pluginHealthCheck != nil {
-		c.pluginHealthCheck.Stop()
-		c.pluginHealthCheckDone <- true
+	if c.PluginBinary != "" {
+		if c.pluginHealthCheck != nil {
+			c.pluginHealthCheck.Stop()
+			c.pluginHealthCheckDone <- true
+		}
+		if c.pluginRPCClient != nil {
+			return c.pluginRPCClient.Close()
+		}
+		return nil
 	}
-
 	return c.RemoteTLS.Close()
 }
 

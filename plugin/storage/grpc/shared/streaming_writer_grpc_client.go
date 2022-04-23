@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/jaegertracing/jaeger/model"
 	"github.com/jaegertracing/jaeger/proto-gen/storage_v1"
@@ -51,4 +53,16 @@ func (s *streamingWriterGRPCClient) WriteSpan(ctx context.Context, span *model.S
 		}
 	}
 	return s.stream.Send(&storage_v1.WriteSpanRequest{Span: span})
+}
+
+func (s *streamingWriterGRPCClient) Close() error {
+	if s.stream != nil {
+		if _, err := s.stream.CloseAndRecv(); err != nil {
+			return fmt.Errorf("plugin error: %w", err)
+		}
+	}
+	if err := s.grpcClient.Close(); err != nil && status.Code(err) != codes.Unimplemented {
+		return fmt.Errorf("plugin error: %w", err)
+	}
+	return nil
 }
