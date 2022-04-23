@@ -20,6 +20,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/jaegertracing/jaeger/proto-gen/storage_v1"
 	grpcMocks "github.com/jaegertracing/jaeger/proto-gen/storage_v1/mocks"
@@ -27,31 +30,68 @@ import (
 
 type grpcStreamWriterClientTest struct {
 	client              *streamingWriterGRPCClient
+	spanWriter          *grpcMocks.SpanWriterPluginClient
 	streamingSpanWriter *grpcMocks.StreamingSpanWriterPluginClient
-	stream              *grpcMocks.StreamingSpanWriterPlugin_WriteSpanStreamClient
 }
 
 func withStreamingWriterGRPCClient(fn func(r *grpcStreamWriterClientTest)) {
-	streamingSpanWriter := new(grpcMocks.StreamingSpanWriterPluginClient)
-	stream := new(grpcMocks.StreamingSpanWriterPlugin_WriteSpanStreamClient)
+	streamingWriterClient := new(grpcMocks.StreamingSpanWriterPluginClient)
+	writerClient := new(grpcMocks.SpanWriterPluginClient)
 	r := &grpcStreamWriterClientTest{
 		client: &streamingWriterGRPCClient{
-			streamingWriterClient: streamingSpanWriter,
-			stream:                stream,
+			grpcClient: &grpcClient{
+				writerClient: writerClient,
+			},
+			streamingWriterClient: streamingWriterClient,
 		},
-		streamingSpanWriter: streamingSpanWriter,
-		stream:              stream,
+		spanWriter:          writerClient,
+		streamingSpanWriter: streamingWriterClient,
 	}
 	fn(r)
 }
 
-func TestStreamClientWriteSpan(t *testing.T) {
+func TestNewStreamingWriterGPRCClient(t *testing.T) {
+	sc := NewStreamingWriterGPRCClient(&grpc.ClientConn{})
+	assert.NotNil(t, sc.grpcClient)
+	assert.NotNil(t, sc.streamingWriterClient)
+}
+
+func TestStreamClientWriteSpanStream(t *testing.T) {
 	withStreamingWriterGRPCClient(func(r *grpcStreamWriterClientTest) {
-		r.streamingSpanWriter.On("WriteSpanStream", mock.Anything).Return(r.stream, nil)
-		r.stream.On("Send", &storage_v1.WriteSpanRequest{
+		stream := new(grpcMocks.SpanWriterPlugin_WriteSpanStreaminglyClient)
+		stream.On("Send", &storage_v1.WriteSpanRequest{
 			Span: &mockTraceSpans[0],
 		}).Return(nil)
-		err := r.client.WriteSpan(context.Background(), &mockTraceSpans[0])
+		r.streamingSpanWriter.On("WriteSpanStream", mock.Anything).Return(nil, status.Error(codes.DeadlineExceeded, "")).Once().
+			On("WriteSpanStream", mock.Anything).Return(stream, nil).Once()
+
+		err := r.client.SpanWriter().WriteSpan(context.Background(), &mockTraceSpans[0])
+		assert.Error(t, err)
+		err = r.client.SpanWriter().WriteSpan(context.Background(), &mockTraceSpans[0])
 		assert.NoError(t, err)
+
+		stream.On("CloseAndRecv").Return(&storage_v1.WriteSpanResponse{}, nil).Once().
+			On("CloseAndRecv").Return(nil, status.Error(codes.DeadlineExceeded, ""))
+		r.spanWriter.On("Close", context.Background(), &storage_v1.CloseWriterRequest{}).Return(&storage_v1.CloseWriterResponse{}, nil)
+
+		err = r.client.Close()
+		assert.NoError(t, err)
+		err = r.client.Close()
+		assert.Error(t, err)
+	})
+}
+
+func TestStreamClientClose(t *testing.T) {
+	withStreamingWriterGRPCClient(func(r *grpcStreamWriterClientTest) {
+		stream := new(grpcMocks.SpanWriterPlugin_WriteSpanStreaminglyClient)
+		stream.On("CloseAndRecv").Return(&storage_v1.WriteSpanResponse{}, nil)
+		r.spanWriter.On("Close", context.Background(), &storage_v1.CloseWriterRequest{}).Return(&storage_v1.CloseWriterResponse{}, nil).Once()
+
+		err := r.client.Close()
+		assert.NoError(t, err)
+
+		r.spanWriter.On("Close", context.Background(), &storage_v1.CloseWriterRequest{}).Return(nil, status.Error(codes.DeadlineExceeded, ""))
+		err = r.client.Close()
+		assert.Error(t, err)
 	})
 }
