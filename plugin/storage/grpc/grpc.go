@@ -39,6 +39,12 @@ func ServeWithGRPCServer(services *shared.PluginServices, grpcServer func([]grpc
 					ArchiveImpl: services.ArchiveStore,
 				},
 			},
+			2: map[string]plugin.Plugin{
+				shared.StoragePluginIdentifier: &shared.StorageStreamingWriterGRPCPlugin{
+					Impl:        services.Store,
+					ArchiveImpl: services.ArchiveStore,
+				},
+			},
 		},
 		GRPCServer: grpcServer,
 	})

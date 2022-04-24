@@ -122,6 +122,9 @@ func (c *Configuration) buildPlugin(logger *zap.Logger) (*ClientPluginServices, 
 		HandshakeConfig: shared.Handshake,
 		VersionedPlugins: map[int]plugin.PluginSet{
 			1: shared.PluginMap,
+			2: map[string]plugin.Plugin{
+				shared.StoragePluginIdentifier: &shared.StorageStreamingWriterGRPCPlugin{},
+			},
 		},
 		Cmd:              cmd,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},

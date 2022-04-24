@@ -146,6 +146,11 @@ service SpanWriterPlugin {
     rpc Close(CloseWriterRequest) returns (CloseWriterResponse);
 }
 
+service StreamingSpanWriterPlugin {
+    // designed for go-plugin, remote server should use WriteSpan
+    rpc WriteSpanStream(stream WriteSpanRequest) returns (WriteSpanResponse);
+}
+
 service SpanReaderPlugin {
     // spanstore/Reader
     rpc GetTrace(GetTraceRequest) returns (stream SpansResponseChunk);
