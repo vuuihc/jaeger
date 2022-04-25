@@ -49,8 +49,9 @@ func (b *mockPluginBuilder) Build(logger *zap.Logger) (*grpcConfig.ClientPluginS
 
 	services := &grpcConfig.ClientPluginServices{
 		PluginServices: shared.PluginServices{
-			Store:        b.plugin,
-			ArchiveStore: b.plugin,
+			Store:               b.plugin,
+			ArchiveStore:        b.plugin,
+			StreamingSpanWriter: b.plugin,
 		},
 	}
 	if b.plugin.capabilities != nil {
@@ -65,12 +66,13 @@ func (b *mockPluginBuilder) Close() error {
 }
 
 type mockPlugin struct {
-	spanReader       spanstore.Reader
-	spanWriter       spanstore.Writer
-	archiveReader    spanstore.Reader
-	archiveWriter    spanstore.Writer
-	capabilities     shared.PluginCapabilities
-	dependencyReader dependencystore.Reader
+	spanReader          spanstore.Reader
+	spanWriter          spanstore.Writer
+	archiveReader       spanstore.Reader
+	archiveWriter       spanstore.Writer
+	streamingSpanWriter spanstore.Writer
+	capabilities        shared.PluginCapabilities
+	dependencyReader    dependencystore.Reader
 }
 
 func (mp *mockPlugin) Capabilities() (*shared.Capabilities, error) {
@@ -93,6 +95,10 @@ func (mp *mockPlugin) SpanWriter() spanstore.Writer {
 	return mp.spanWriter
 }
 
+func (mp *mockPlugin) StreamingSpanWriter() spanstore.Writer {
+	return mp.streamingSpanWriter
+}
+
 func (mp *mockPlugin) DependencyReader() dependencystore.Reader {
 	return mp.dependencyReader
 }
@@ -111,14 +117,17 @@ func TestGRPCStorageFactory(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "made-up error")
 
+	capabilities := new(mocks.PluginCapabilities)
+	capabilities.On("Capabilities").Return(&shared.Capabilities{}, nil)
 	f.builder = &mockPluginBuilder{
 		plugin: &mockPlugin{
-			spanWriter:       new(spanStoreMocks.Writer),
-			spanReader:       new(spanStoreMocks.Reader),
-			archiveWriter:    new(spanStoreMocks.Writer),
-			archiveReader:    new(spanStoreMocks.Reader),
-			capabilities:     new(mocks.PluginCapabilities),
-			dependencyReader: new(dependencyStoreMocks.Reader),
+			spanWriter:          new(spanStoreMocks.Writer),
+			spanReader:          new(spanStoreMocks.Reader),
+			archiveWriter:       new(spanStoreMocks.Writer),
+			archiveReader:       new(spanStoreMocks.Reader),
+			streamingSpanWriter: new(spanStoreMocks.Writer),
+			capabilities:        new(mocks.PluginCapabilities),
+			dependencyReader:    new(dependencyStoreMocks.Reader),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -143,15 +152,17 @@ func TestGRPCStorageFactory_Capabilities(t *testing.T) {
 	capabilities := new(mocks.PluginCapabilities)
 	capabilities.On("Capabilities").
 		Return(&shared.Capabilities{
-			ArchiveSpanReader: true,
-			ArchiveSpanWriter: true,
-		}, nil)
+			ArchiveSpanReader:   true,
+			ArchiveSpanWriter:   true,
+			StreamingSpanWriter: true,
+		}, nil).Once()
 
 	f.builder = &mockPluginBuilder{
 		plugin: &mockPlugin{
-			capabilities:  capabilities,
-			archiveWriter: new(spanStoreMocks.Writer),
-			archiveReader: new(spanStoreMocks.Reader),
+			capabilities:        capabilities,
+			archiveWriter:       new(spanStoreMocks.Writer),
+			archiveReader:       new(spanStoreMocks.Reader),
+			streamingSpanWriter: new(spanStoreMocks.Writer),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -163,6 +174,9 @@ func TestGRPCStorageFactory_Capabilities(t *testing.T) {
 	writer, err := f.CreateArchiveSpanWriter()
 	assert.NoError(t, err)
 	assert.NotNil(t, writer)
+	writer, err = f.CreateSpanWriter()
+	assert.NoError(t, err)
+	assert.Equal(t, f.streamingSpanWriter, writer)
 }
 
 func TestGRPCStorageFactory_CapabilitiesDisabled(t *testing.T) {
@@ -173,8 +187,9 @@ func TestGRPCStorageFactory_CapabilitiesDisabled(t *testing.T) {
 	capabilities := new(mocks.PluginCapabilities)
 	capabilities.On("Capabilities").
 		Return(&shared.Capabilities{
-			ArchiveSpanReader: false,
-			ArchiveSpanWriter: false,
+			ArchiveSpanReader:   false,
+			ArchiveSpanWriter:   false,
+			StreamingSpanWriter: false,
 		}, nil)
 
 	f.builder = &mockPluginBuilder{
@@ -182,6 +197,7 @@ func TestGRPCStorageFactory_CapabilitiesDisabled(t *testing.T) {
 			capabilities:  capabilities,
 			archiveWriter: new(spanStoreMocks.Writer),
 			archiveReader: new(spanStoreMocks.Reader),
+			spanWriter:    new(spanStoreMocks.Writer),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -193,6 +209,9 @@ func TestGRPCStorageFactory_CapabilitiesDisabled(t *testing.T) {
 	writer, err := f.CreateArchiveSpanWriter()
 	assert.EqualError(t, err, storage.ErrArchiveStorageNotSupported.Error())
 	assert.Nil(t, writer)
+	writer, err = f.CreateSpanWriter()
+	assert.NoError(t, err)
+	assert.Equal(t, f.store.SpanWriter(), writer)
 }
 
 func TestGRPCStorageFactory_CapabilitiesError(t *testing.T) {
@@ -210,6 +229,7 @@ func TestGRPCStorageFactory_CapabilitiesError(t *testing.T) {
 			capabilities:  capabilities,
 			archiveWriter: new(spanStoreMocks.Writer),
 			archiveReader: new(spanStoreMocks.Reader),
+			spanWriter:    new(spanStoreMocks.Writer),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -221,6 +241,9 @@ func TestGRPCStorageFactory_CapabilitiesError(t *testing.T) {
 	writer, err := f.CreateArchiveSpanWriter()
 	assert.EqualError(t, err, customError.Error())
 	assert.Nil(t, writer)
+	writer, err = f.CreateSpanWriter()
+	assert.NoError(t, err)
+	assert.Equal(t, f.store.SpanWriter(), writer)
 }
 
 func TestGRPCStorageFactory_CapabilitiesNil(t *testing.T) {
@@ -232,6 +255,7 @@ func TestGRPCStorageFactory_CapabilitiesNil(t *testing.T) {
 		plugin: &mockPlugin{
 			archiveWriter: new(spanStoreMocks.Writer),
 			archiveReader: new(spanStoreMocks.Reader),
+			spanWriter:    new(spanStoreMocks.Writer),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -243,6 +267,9 @@ func TestGRPCStorageFactory_CapabilitiesNil(t *testing.T) {
 	writer, err := f.CreateArchiveSpanWriter()
 	assert.Equal(t, err, storage.ErrArchiveStorageNotSupported)
 	assert.Nil(t, writer)
+	writer, err = f.CreateSpanWriter()
+	assert.NoError(t, err)
+	assert.Equal(t, f.store.SpanWriter(), writer)
 }
 
 func TestWithConfiguration(t *testing.T) {

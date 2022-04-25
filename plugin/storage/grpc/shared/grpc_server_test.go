@@ -17,6 +17,7 @@ package shared
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -218,6 +219,25 @@ func TestGRPCServerWriteSpan(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, &storage_v1.WriteSpanResponse{}, s)
+	})
+}
+
+func TestGRPCServerWriteSpanStream(t *testing.T) {
+	withGRPCServer(func(r *grpcServerTest) {
+		stream := new(grpcMocks.StreamingSpanWriterPlugin_WriteSpanStreamServer)
+		stream.On("Recv").Return(&storage_v1.WriteSpanRequest{Span: &mockTraceSpans[0]}, nil).Twice().
+			On("Recv").Return(nil, io.EOF).Once()
+		stream.On("SendAndClose", &storage_v1.WriteSpanResponse{}).Return(nil)
+		stream.On("Context").Return(context.Background())
+		r.impl.spanWriter.On("WriteSpan", context.Background(), &mockTraceSpans[0]).
+			Return(fmt.Errorf("some error")).Once().
+			On("WriteSpan", context.Background(), &mockTraceSpans[0]).
+			Return(nil)
+
+		err := r.server.WriteSpanStream(stream)
+		assert.Error(t, err)
+		err = r.server.WriteSpanStream(stream)
+		assert.NoError(t, err)
 	})
 }
 

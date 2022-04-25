@@ -72,8 +72,9 @@ func main() {
 
 	memStorePlugin := grpcMemory.NewStoragePlugin(memory.NewStore(), memory.NewStore())
 	grpc.ServeWithGRPCServer(&shared.PluginServices{
-		Store:        memStorePlugin,
-		ArchiveStore: memStorePlugin,
+		Store:               memStorePlugin,
+		ArchiveStore:        memStorePlugin,
+		StreamingSpanWriter: memStorePlugin,
 	}, func(options []googleGRPC.ServerOption) *googleGRPC.Server {
 		return plugin.DefaultGRPCServer([]googleGRPC.ServerOption{
 			googleGRPC.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),

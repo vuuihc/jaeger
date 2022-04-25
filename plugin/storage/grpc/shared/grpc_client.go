@@ -46,22 +46,24 @@ var (
 
 // grpcClient implements shared.StoragePlugin and reads/writes spans and dependencies
 type grpcClient struct {
-	readerClient        storage_v1.SpanReaderPluginClient
-	writerClient        storage_v1.SpanWriterPluginClient
-	archiveReaderClient storage_v1.ArchiveSpanReaderPluginClient
-	archiveWriterClient storage_v1.ArchiveSpanWriterPluginClient
-	capabilitiesClient  storage_v1.PluginCapabilitiesClient
-	depsReaderClient    storage_v1.DependenciesReaderPluginClient
+	readerClient          storage_v1.SpanReaderPluginClient
+	writerClient          storage_v1.SpanWriterPluginClient
+	archiveReaderClient   storage_v1.ArchiveSpanReaderPluginClient
+	archiveWriterClient   storage_v1.ArchiveSpanWriterPluginClient
+	capabilitiesClient    storage_v1.PluginCapabilitiesClient
+	depsReaderClient      storage_v1.DependenciesReaderPluginClient
+	streamingWriterClient storage_v1.StreamingSpanWriterPluginClient
 }
 
 func NewGRPCClient(c *grpc.ClientConn) *grpcClient {
 	return &grpcClient{
-		readerClient:        storage_v1.NewSpanReaderPluginClient(c),
-		writerClient:        storage_v1.NewSpanWriterPluginClient(c),
-		archiveReaderClient: storage_v1.NewArchiveSpanReaderPluginClient(c),
-		archiveWriterClient: storage_v1.NewArchiveSpanWriterPluginClient(c),
-		capabilitiesClient:  storage_v1.NewPluginCapabilitiesClient(c),
-		depsReaderClient:    storage_v1.NewDependenciesReaderPluginClient(c),
+		readerClient:          storage_v1.NewSpanReaderPluginClient(c),
+		writerClient:          storage_v1.NewSpanWriterPluginClient(c),
+		archiveReaderClient:   storage_v1.NewArchiveSpanReaderPluginClient(c),
+		archiveWriterClient:   storage_v1.NewArchiveSpanWriterPluginClient(c),
+		capabilitiesClient:    storage_v1.NewPluginCapabilitiesClient(c),
+		depsReaderClient:      storage_v1.NewDependenciesReaderPluginClient(c),
+		streamingWriterClient: storage_v1.NewStreamingSpanWriterPluginClient(c),
 	}
 }
 
@@ -108,6 +110,10 @@ func (c *grpcClient) SpanReader() spanstore.Reader {
 // SpanWriter implements shared.StoragePlugin.
 func (c *grpcClient) SpanWriter() spanstore.Writer {
 	return c
+}
+
+func (c *grpcClient) StreamingSpanWriter() spanstore.Writer {
+	return &streamingSpanWriter{client: c.streamingWriterClient}
 }
 
 func (c *grpcClient) ArchiveSpanReader() spanstore.Reader {
@@ -278,8 +284,9 @@ func (c *grpcClient) Capabilities() (*Capabilities, error) {
 	}
 
 	return &Capabilities{
-		ArchiveSpanReader: capabilities.ArchiveSpanReader,
-		ArchiveSpanWriter: capabilities.ArchiveSpanWriter,
+		ArchiveSpanReader:   capabilities.ArchiveSpanReader,
+		ArchiveSpanWriter:   capabilities.ArchiveSpanWriter,
+		StreamingSpanWriter: capabilities.StreamingSpanWriter,
 	}, nil
 }
 

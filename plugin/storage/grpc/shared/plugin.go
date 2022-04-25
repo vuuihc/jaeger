@@ -32,15 +32,17 @@ type StorageGRPCPlugin struct {
 	plugin.Plugin
 
 	// Concrete implementation, This is only used for plugins that are written in Go.
-	Impl        StoragePlugin
-	ArchiveImpl ArchiveStoragePlugin
+	Impl                StoragePlugin
+	ArchiveImpl         ArchiveStoragePlugin
+	StreamingWriterImpl StreamingSpanWriterPlugin
 }
 
 // RegisterHandlers registers the plugin with the server
 func (p *StorageGRPCPlugin) RegisterHandlers(s *grpc.Server) error {
 	server := &grpcServer{
-		Impl:        p.Impl,
-		ArchiveImpl: p.ArchiveImpl,
+		Impl:                p.Impl,
+		ArchiveImpl:         p.ArchiveImpl,
+		StreamingWriterImpl: p.StreamingWriterImpl,
 	}
 	storage_v1.RegisterSpanReaderPluginServer(s, server)
 	storage_v1.RegisterSpanWriterPluginServer(s, server)
@@ -48,6 +50,7 @@ func (p *StorageGRPCPlugin) RegisterHandlers(s *grpc.Server) error {
 	storage_v1.RegisterArchiveSpanWriterPluginServer(s, server)
 	storage_v1.RegisterPluginCapabilitiesServer(s, server)
 	storage_v1.RegisterDependenciesReaderPluginServer(s, server)
+	storage_v1.RegisterStreamingSpanWriterPluginServer(s, server)
 	return nil
 }
 
