@@ -41,6 +41,7 @@ type Configuration struct {
 	PluginBinary            string `yaml:"binary" mapstructure:"binary"`
 	PluginConfigurationFile string `yaml:"configuration-file" mapstructure:"configuration_file"`
 	PluginLogLevel          string `yaml:"log-level" mapstructure:"log_level"`
+	PluginWriterType        string `yaml:"writer-type" mapstructure:"writer_type"`
 	RemoteServerAddr        string `yaml:"server" mapstructure:"server"`
 	RemoteTLS               tlscfg.Options
 	RemoteConnectTimeout    time.Duration `yaml:"connection-timeout" mapstructure:"connection-timeout"`
@@ -159,6 +160,14 @@ func (c *Configuration) buildPlugin(logger *zap.Logger) (*ClientPluginServices, 
 		return nil, fmt.Errorf("unable to cast %T to shared.ArchiveStoragePlugin for plugin \"%s\"",
 			raw, shared.StoragePluginIdentifier)
 	}
+	var streamingSpanWriterPlugin shared.StreamingSpanWriterPlugin
+	if c.PluginWriterType == "streaming" {
+		streamingSpanWriterPlugin, ok = raw.(shared.StreamingSpanWriterPlugin)
+		if !ok {
+			return nil, fmt.Errorf("unable to cast %T to shared.StreamingSpanWriterPlugin for plugin \"%s\"",
+				raw, shared.StoragePluginIdentifier)
+		}
+	}
 	capabilities, ok := raw.(shared.PluginCapabilities)
 	if !ok {
 		return nil, fmt.Errorf("unable to cast %T to shared.PluginCapabilities for plugin \"%s\"",
@@ -171,8 +180,9 @@ func (c *Configuration) buildPlugin(logger *zap.Logger) (*ClientPluginServices, 
 
 	return &ClientPluginServices{
 		PluginServices: shared.PluginServices{
-			Store:        storagePlugin,
-			ArchiveStore: archiveStoragePlugin,
+			Store:               storagePlugin,
+			ArchiveStore:        archiveStoragePlugin,
+			StreamingSpanWriter: streamingSpanWriterPlugin,
 		},
 		Capabilities: capabilities,
 	}, nil

@@ -31,6 +31,7 @@ func TestOptionsWithFlags(t *testing.T) {
 		"--grpc-storage-plugin.binary=noop-grpc-plugin",
 		"--grpc-storage-plugin.configuration-file=config.json",
 		"--grpc-storage-plugin.log-level=debug",
+		"--grpc-storage-plugin.writer-type=streaming",
 	})
 	assert.NoError(t, err)
 	opts.InitFromViper(v)
@@ -38,6 +39,7 @@ func TestOptionsWithFlags(t *testing.T) {
 	assert.Equal(t, opts.Configuration.PluginBinary, "noop-grpc-plugin")
 	assert.Equal(t, opts.Configuration.PluginConfigurationFile, "config.json")
 	assert.Equal(t, opts.Configuration.PluginLogLevel, "debug")
+	assert.Equal(t, opts.Configuration.PluginWriterType, "streaming")
 }
 
 func TestRemoteOptionsWithFlags(t *testing.T) {
