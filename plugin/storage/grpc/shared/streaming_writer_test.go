@@ -36,9 +36,7 @@ type streamingSpanWriterTest struct {
 func withStreamingWriterGRPCClient(fn func(r *streamingSpanWriterTest)) {
 	streamingWriterClient := new(grpcMocks.StreamingSpanWriterPluginClient)
 	r := &streamingSpanWriterTest{
-		client: &streamingSpanWriter{
-			client: streamingWriterClient,
-		},
+		client:              newStreamingSpanWriter(streamingWriterClient),
 		streamingSpanWriter: streamingWriterClient,
 	}
 	fn(r)
@@ -69,7 +67,7 @@ func TestStreamClientClose(t *testing.T) {
 		stream := new(grpcMocks.StreamingSpanWriterPlugin_WriteSpanStreamClient)
 		stream.On("CloseAndRecv").Return(&storage_v1.WriteSpanResponse{}, nil).Once().
 			On("CloseAndRecv").Return(nil, status.Error(codes.DeadlineExceeded, ""))
-		r.client.stream = stream
+		r.client.streamPool = append(r.client.streamPool, stream)
 
 		err = r.client.Close()
 		assert.NoError(t, err)

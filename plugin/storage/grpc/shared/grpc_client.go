@@ -113,7 +113,7 @@ func (c *grpcClient) SpanWriter() spanstore.Writer {
 }
 
 func (c *grpcClient) StreamingSpanWriter() spanstore.Writer {
-	return &streamingSpanWriter{client: c.streamWriterClient}
+	return newStreamingSpanWriter(c.streamWriterClient)
 }
 
 func (c *grpcClient) ArchiveSpanReader() spanstore.Reader {

@@ -164,6 +164,33 @@ func TestGRPCStorage(t *testing.T) {
 	s.IntegrationTestAll(t)
 }
 
+func TestGRPCStreamingWriter(t *testing.T) {
+	binaryPath := os.Getenv("PLUGIN_BINARY_PATH")
+	if binaryPath == "" {
+		t.Logf("PLUGIN_BINARY_PATH env var not set, using %s", defaultPluginBinaryPath)
+		binaryPath = defaultPluginBinaryPath
+	}
+	configPath := os.Getenv("PLUGIN_CONFIG_PATH")
+	if configPath == "" {
+		t.Log("PLUGIN_CONFIG_PATH env var not set")
+	}
+
+	flags := []string{
+		"--grpc-storage-plugin.binary", binaryPath,
+		"--grpc-storage-plugin.log-level", "debug",
+		"--grpc-storage-plugin.log-level", "streaming",
+	}
+	flags = append(flags,
+		"--grpc-storage-plugin.configuration-file", configPath,
+	)
+
+	s := &GRPCStorageIntegrationTestSuite{
+		flags: flags,
+	}
+	require.NoError(t, s.initialize())
+	s.IntegrationTestAll(t)
+}
+
 func TestGRPCRemoteStorage(t *testing.T) {
 	flags := []string{
 		"--grpc-storage.server=localhost:2001",

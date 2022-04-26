@@ -29,10 +29,12 @@ const (
 	pluginBinary             = "grpc-storage-plugin.binary"
 	pluginConfigurationFile  = "grpc-storage-plugin.configuration-file"
 	pluginLogLevel           = "grpc-storage-plugin.log-level"
+	pluginWriterType         = "grpc-storage-plugin.writer-type"
 	remotePrefix             = "grpc-storage"
 	remoteServer             = remotePrefix + ".server"
 	remoteConnectionTimeout  = remotePrefix + ".connection-timeout"
 	defaultPluginLogLevel    = "warn"
+	defaultWriterType        = "unary"
 	defaultConnectionTimeout = time.Duration(5 * time.Second)
 )
 
@@ -55,6 +57,7 @@ func (opt *Options) AddFlags(flagSet *flag.FlagSet) {
 	flagSet.String(pluginBinary, "", "The location of the plugin binary")
 	flagSet.String(pluginConfigurationFile, "", "A path pointing to the plugin's configuration file, made available to the plugin with the --config arg")
 	flagSet.String(pluginLogLevel, defaultPluginLogLevel, "Set the log level of the plugin's logger")
+	flagSet.String(pluginWriterType, defaultWriterType, "The plugin span writer's grpc rpc type")
 	flagSet.String(remoteServer, "", "The remote storage gRPC server address")
 	flagSet.Duration(remoteConnectionTimeout, defaultConnectionTimeout, "The remote storage gRPC server connection timeout")
 
@@ -65,6 +68,7 @@ func (opt *Options) InitFromViper(v *viper.Viper) error {
 	opt.Configuration.PluginBinary = v.GetString(pluginBinary)
 	opt.Configuration.PluginConfigurationFile = v.GetString(pluginConfigurationFile)
 	opt.Configuration.PluginLogLevel = v.GetString(pluginLogLevel)
+	opt.Configuration.PluginWriterType = v.GetString(pluginWriterType)
 	opt.Configuration.RemoteServerAddr = v.GetString(remoteServer)
 	var err error
 	opt.Configuration.RemoteTLS, err = tlsFlagsConfig().InitFromViper(v)

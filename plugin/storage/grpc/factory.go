@@ -15,6 +15,7 @@
 package grpc
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -94,12 +95,16 @@ func (f *Factory) CreateSpanReader() (spanstore.Reader, error) {
 
 // CreateSpanWriter implements storage.Factory
 func (f *Factory) CreateSpanWriter() (spanstore.Writer, error) {
-	if f.capabilities != nil {
-		if capabilities, err := f.capabilities.Capabilities(); err == nil && capabilities.StreamingSpanWriter {
-			return f.streamingSpanWriter.StreamingSpanWriter(), nil
-		}
+	if f.streamingSpanWriter == nil {
+		return f.store.SpanWriter(), nil
 	}
-	return f.store.SpanWriter(), nil
+	if f.capabilities == nil {
+		return nil, errors.New("streaming writer not supported")
+	}
+	if capabilities, err := f.capabilities.Capabilities(); err != nil || !capabilities.StreamingSpanWriter {
+		return nil, fmt.Errorf("streaming writer not supported, capabilities %v, err %v", capabilities, err)
+	}
+	return f.streamingSpanWriter.StreamingSpanWriter(), nil
 }
 
 // CreateDependencyReader implements storage.Factory

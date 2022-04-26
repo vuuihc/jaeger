@@ -38,8 +38,9 @@ import (
 var _ storage.Factory = new(Factory)
 
 type mockPluginBuilder struct {
-	plugin *mockPlugin
-	err    error
+	plugin     *mockPlugin
+	writerType string
+	err        error
 }
 
 func (b *mockPluginBuilder) Build(logger *zap.Logger) (*grpcConfig.ClientPluginServices, error) {
@@ -49,10 +50,12 @@ func (b *mockPluginBuilder) Build(logger *zap.Logger) (*grpcConfig.ClientPluginS
 
 	services := &grpcConfig.ClientPluginServices{
 		PluginServices: shared.PluginServices{
-			Store:               b.plugin,
-			ArchiveStore:        b.plugin,
-			StreamingSpanWriter: b.plugin,
+			Store:        b.plugin,
+			ArchiveStore: b.plugin,
 		},
+	}
+	if b.writerType == "streaming" {
+		services.PluginServices.StreamingSpanWriter = b.plugin
 	}
 	if b.plugin.capabilities != nil {
 		services.Capabilities = b.plugin
@@ -121,13 +124,12 @@ func TestGRPCStorageFactory(t *testing.T) {
 	capabilities.On("Capabilities").Return(&shared.Capabilities{}, nil)
 	f.builder = &mockPluginBuilder{
 		plugin: &mockPlugin{
-			spanWriter:          new(spanStoreMocks.Writer),
-			spanReader:          new(spanStoreMocks.Reader),
-			archiveWriter:       new(spanStoreMocks.Writer),
-			archiveReader:       new(spanStoreMocks.Reader),
-			streamingSpanWriter: new(spanStoreMocks.Writer),
-			capabilities:        capabilities,
-			dependencyReader:    new(dependencyStoreMocks.Reader),
+			spanWriter:       new(spanStoreMocks.Writer),
+			spanReader:       new(spanStoreMocks.Reader),
+			archiveWriter:    new(spanStoreMocks.Writer),
+			archiveReader:    new(spanStoreMocks.Reader),
+			capabilities:     capabilities,
+			dependencyReader: new(dependencyStoreMocks.Reader),
 		},
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
@@ -164,6 +166,7 @@ func TestGRPCStorageFactory_Capabilities(t *testing.T) {
 			archiveReader:       new(spanStoreMocks.Reader),
 			streamingSpanWriter: new(spanStoreMocks.Writer),
 		},
+		writerType: "streaming",
 	}
 	assert.NoError(t, f.Initialize(metrics.NullFactory, zap.NewNop()))
 
@@ -279,12 +282,14 @@ func TestWithConfiguration(t *testing.T) {
 		"--grpc-storage-plugin.log-level=debug",
 		"--grpc-storage-plugin.binary=noop-grpc-plugin",
 		"--grpc-storage-plugin.configuration-file=config.json",
+		"--grpc-storage-plugin.writer-type=streaming",
 	})
 	assert.NoError(t, err)
 	f.InitFromViper(v, zap.NewNop())
 	assert.Equal(t, f.options.Configuration.PluginBinary, "noop-grpc-plugin")
 	assert.Equal(t, f.options.Configuration.PluginConfigurationFile, "config.json")
 	assert.Equal(t, f.options.Configuration.PluginLogLevel, "debug")
+	assert.Equal(t, f.options.Configuration.PluginWriterType, "streaming")
 	assert.NoError(t, f.Close())
 }
 

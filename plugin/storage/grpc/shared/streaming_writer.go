@@ -17,8 +17,10 @@ package shared
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/jaegertracing/jaeger/model"
+	"github.com/jaegertracing/jaeger/pkg/multierror"
 	"github.com/jaegertracing/jaeger/proto-gen/storage_v1"
 	"github.com/jaegertracing/jaeger/storage/spanstore"
 )
@@ -29,31 +31,68 @@ var (
 
 // streamingSpanWriter wraps storage_v1.StreamingSpanWriterPluginClient into spanstore.Writer
 type streamingSpanWriter struct {
-	client storage_v1.StreamingSpanWriterPluginClient
-	stream storage_v1.StreamingSpanWriterPlugin_WriteSpanStreamClient
+	client     storage_v1.StreamingSpanWriterPluginClient
+	streamPool []storage_v1.StreamingSpanWriterPlugin_WriteSpanStreamClient
+	closed     bool
+	mu         sync.Mutex
+}
+
+func newStreamingSpanWriter(client storage_v1.StreamingSpanWriterPluginClient) *streamingSpanWriter {
+	s := &streamingSpanWriter{client: client, mu: sync.Mutex{}, streamPool: make([]storage_v1.StreamingSpanWriterPlugin_WriteSpanStreamClient, 0, 1000)}
+	return s
 }
 
 // WriteSpan write span into stream
 func (s *streamingSpanWriter) WriteSpan(ctx context.Context, span *model.Span) error {
-	if s.stream == nil {
-		var err error
-		s.stream, err = s.client.WriteSpanStream(ctx)
-		if err != nil {
-			return fmt.Errorf("plugin WriteSpanStream error: %w", err)
-		}
+	stream, err := s.getStream(ctx)
+	if err != nil {
+		return fmt.Errorf("plugin getStream error: %w", err)
 	}
-	if err := s.stream.Send(&storage_v1.WriteSpanRequest{Span: span}); err != nil {
-		s.stream = nil
+	if err := stream.Send(&storage_v1.WriteSpanRequest{Span: span}); err != nil {
 		return fmt.Errorf("plugin Send error: %w", err)
 	}
+	s.putStream(stream)
 	return nil
 }
 
 func (s *streamingSpanWriter) Close() error {
-	if s.stream != nil {
-		if _, err := s.stream.CloseAndRecv(); err != nil {
-			return fmt.Errorf("plugin error: %w", err)
-		}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	wg := sync.WaitGroup{}
+	errs := make([]error, 0)
+	errMu := sync.Mutex{}
+	for i := range s.streamPool {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := s.streamPool[i].CloseAndRecv(); err != nil {
+				errMu.Lock()
+				errs = append(errs, err)
+			}
+		}(i)
 	}
-	return nil
+	wg.Wait()
+	s.closed = true
+	return multierror.Wrap(errs)
+}
+
+func (s *streamingSpanWriter) getStream(ctx context.Context) (storage_v1.StreamingSpanWriterPlugin_WriteSpanStreamClient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, fmt.Errorf("plugin has closed")
+	}
+	poolSize := len(s.streamPool)
+	if poolSize > 0 {
+		stream := s.streamPool[poolSize-1]
+		s.streamPool = s.streamPool[:poolSize-1]
+		return stream, nil
+	}
+	return s.client.WriteSpanStream(ctx)
+}
+
+func (s *streamingSpanWriter) putStream(stream storage_v1.StreamingSpanWriterPlugin_WriteSpanStreamClient) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.streamPool = append(s.streamPool, stream)
 }
