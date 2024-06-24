@@ -15,6 +15,7 @@
 package grpc
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -38,9 +39,10 @@ type Factory struct {
 
 	builder config.PluginBuilder
 
-	store        shared.StoragePlugin
-	archiveStore shared.ArchiveStoragePlugin
-	capabilities shared.PluginCapabilities
+	store               shared.StoragePlugin
+	archiveStore        shared.ArchiveStoragePlugin
+	streamingSpanWriter shared.StreamingSpanWriterPlugin
+	capabilities        shared.PluginCapabilities
 }
 
 var _ io.Closer = (*Factory)(nil)
@@ -81,6 +83,7 @@ func (f *Factory) Initialize(metricsFactory metrics.Factory, logger *zap.Logger)
 	f.store = services.Store
 	f.archiveStore = services.ArchiveStore
 	f.capabilities = services.Capabilities
+	f.streamingSpanWriter = services.StreamingSpanWriter
 	logger.Info("External plugin storage configuration", zap.Any("configuration", f.options.Configuration))
 	return nil
 }
@@ -92,7 +95,16 @@ func (f *Factory) CreateSpanReader() (spanstore.Reader, error) {
 
 // CreateSpanWriter implements storage.Factory
 func (f *Factory) CreateSpanWriter() (spanstore.Writer, error) {
-	return f.store.SpanWriter(), nil
+	if f.streamingSpanWriter == nil {
+		return f.store.SpanWriter(), nil
+	}
+	if f.capabilities == nil {
+		return nil, errors.New("streaming writer not supported")
+	}
+	if capabilities, err := f.capabilities.Capabilities(); err != nil || !capabilities.StreamingSpanWriter {
+		return nil, fmt.Errorf("streaming writer not supported, capabilities %v, err %v", capabilities, err)
+	}
+	return f.streamingSpanWriter.StreamingSpanWriter(), nil
 }
 
 // CreateDependencyReader implements storage.Factory
